@@ -1,0 +1,6 @@
+{
+  "name": "BharatAI",
+  "description": "India's first powerful multi-model AI assistant combining the conversational grace of ChatGPT and the depth of Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
