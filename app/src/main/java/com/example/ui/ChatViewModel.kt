@@ -32,34 +32,37 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
             initialValue = emptyList()
         )
 
-    private val _activeMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val activeMessages: StateFlow<List<ChatMessage>> = _activeMessages.asStateFlow()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val activeMessages: StateFlow<List<ChatMessage>> = _activeThreadId
+        .flatMapLatest { threadId ->
+            if (threadId != -1) {
+                repository.getMessages(threadId)
+            } else {
+                flow { emit(emptyList<ChatMessage>()) }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     // Keep track of any active API warning (e.g., missing API key)
     private val _apiError = MutableStateFlow<String?>(null)
     val apiError: StateFlow<String?> = _apiError.asStateFlow()
 
     init {
-        // Observe changes in the active thread ID to load its respective messages reactively
-        viewModelScope.launch {
-            _activeThreadId.collect { threadId ->
-                if (threadId != -1) {
-                    repository.getMessages(threadId).collect { msgList ->
-                        _activeMessages.value = msgList
-                    }
-                } else {
-                    _activeMessages.value = emptyList()
-                }
-            }
-        }
-
         // Auto-select latest thread if available when threads list gets updated initially
         viewModelScope.launch {
-            allThreads.collect { threads ->
-                if (_activeThreadId.value == -1 && threads.isNotEmpty()) {
-                    _activeThreadId.value = threads.first().id
-                    _selectedEngineMode.value = threads.first().engineMode
+            try {
+                allThreads.first { it.isNotEmpty() }.let { threads ->
+                    if (_activeThreadId.value == -1) {
+                        _activeThreadId.value = threads.first().id
+                        _selectedEngineMode.value = threads.first().engineMode
+                    }
                 }
+            } catch (e: Exception) {
+                // Fail-safe
             }
         }
     }
@@ -76,7 +79,6 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
 
     fun createNewThread() {
         _activeThreadId.value = -1
-        _activeMessages.value = emptyList()
         _apiError.value = null
     }
 
@@ -89,7 +91,6 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
                     _activeThreadId.value = remaining.first().id
                 } else {
                     _activeThreadId.value = -1
-                    _activeMessages.value = emptyList()
                 }
             }
         }
